@@ -105,15 +105,14 @@ class SelectorCV(ModelSelector):
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        word_sequences = self.words[self.this_word]
-        n_splits = min(len(word_sequences), 3)
+        n_splits = min(len(self.sequences), 3)
         split_method = KFold(n_splits)
         training_sets = []
         test_sets = []
-        for cv_train_idx, cv_test_idx in split_method.split(word_sequences):
-            x, x_lengths = combine_sequences(cv_train_idx, word_sequences)
+        for cv_train_idx, cv_test_idx in split_method.split(self.sequences):
+            x, x_lengths = combine_sequences(cv_train_idx, self.sequences)
             training_sets.append([x, x_lengths])
-            y, y_lengths = combine_sequences(cv_test_idx, word_sequences)
+            y, y_lengths = combine_sequences(cv_test_idx, self.sequences)
             test_sets.append([y, y_lengths])
 
         best_model = None
@@ -131,4 +130,5 @@ class SelectorCV(ModelSelector):
             if score > best_score:
                 best_score = score
                 best_model = hmm_model
-        return best_model
+        final_model = best_model.fit(self.X, self.lengths)
+        return final_model
