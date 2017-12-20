@@ -105,5 +105,30 @@ class SelectorCV(ModelSelector):
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection using CV
-        raise NotImplementedError
+        word_sequences = self.words[self.this_word]
+        n_splits = min(len(word_sequences), 3)
+        split_method = KFold(n_splits)
+        training_sets = []
+        test_sets = []
+        for cv_train_idx, cv_test_idx in split_method.split(word_sequences):
+            x, x_lengths = combine_sequences(cv_train_idx, word_sequences)
+            training_sets.append([x, x_lengths])
+            y, y_lengths = combine_sequences(cv_test_idx, word_sequences)
+            test_sets.append([y, y_lengths])
+
+        best_model = None
+        best_score = float('-inf')
+        for num_states in range(self.min_n_components, self.max_n_components + 1):
+            score = 0
+            for train, test in zip(training_sets, test_sets):
+                try:
+                    hmm_model = GaussianHMM(n_components=num_states, covariance_type="diag", n_iter=1000,
+                                            random_state=self.random_state, verbose=False).fit(train[0], train[1])
+                    score += hmm_model.score(test[0], test[1])
+                except:
+                    if self.verbose:
+                        print("failure on {} with {} states".format(self.this_word, num_states))
+            if score > best_score:
+                best_score = score
+                best_model = hmm_model
+        return best_model
