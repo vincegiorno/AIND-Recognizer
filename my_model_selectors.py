@@ -76,8 +76,20 @@ class SelectorBIC(ModelSelector):
         """
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on BIC scores
-        raise NotImplementedError
+        best_model = None
+        best_score = float('inf')
+        for num_states in range(self.min_n_components, self.max_n_components + 1):
+            try:
+                hmm_model = GaussianHMM(n_components=num_states, covariance_type="diag", n_iter=1000,
+                                        random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
+                score = -2 * hmm_model.score(self.X, self.lengths) + 4 * np.log(num_states)
+            except:
+                if self.verbose:
+                    print("failure on {} with {} states".format(self.this_word, num_states))
+            if score < best_score:
+                best_score = score
+                best_model = hmm_model
+        return best_model
 
 
 class SelectorDIC(ModelSelector):
@@ -93,8 +105,29 @@ class SelectorDIC(ModelSelector):
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        best_model = None
+        best_score = float('-inf')
+        for num_states in range(self.min_n_components, self.max_n_components + 1):
+            try:
+                hmm_model = GaussianHMM(n_components=num_states, covariance_type="diag", n_iter=1000,
+                                        random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
+                score = hmm_model.score(self.X, self.lengths)
+                print("score of", score, "for model with", num_states, "states")
+                others = [word for word in self.words.keys() if word != self.this_word]
+                others_score = 0
+                for other in others:
+                    other_sequences, other_lengths = self.hwords[other]
+                    others_score += hmm_model.score(other_sequences, other_lengths)
+                others_score /= len(others)
+                score -= others_score
+                if score > best_score:
+                    best_score = score
+                    best_model = hmm_model
+            except:
+                if self.verbose:
+                    print("failure on {} with {} states".format(self.this_word, num_states))
+
+        return best_model
 
 
 class SelectorCV(ModelSelector):
