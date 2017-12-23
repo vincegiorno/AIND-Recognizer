@@ -79,10 +79,11 @@ class SelectorBIC(ModelSelector):
         best_model = None
         best_score = float('inf')
         for num_states in range(self.min_n_components, self.max_n_components + 1):
+            p = num_states^2 + 8 * num_states - 1
             try:
                 hmm_model = GaussianHMM(n_components=num_states, covariance_type="diag", n_iter=1000,
                                         random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
-                score = -2 * hmm_model.score(self.X, self.lengths) + 4 * np.log(num_states)
+                score = -2 * hmm_model.score(self.X, self.lengths) + p * np.log(len(self.X))
             except:
                 if self.verbose:
                     print("failure on {} with {} states".format(self.this_word, num_states))
