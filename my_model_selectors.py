@@ -85,6 +85,7 @@ class SelectorBIC(ModelSelector):
                                         random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
                 score = -2 * hmm_model.score(self.X, self.lengths) + p * np.log(len(self.X))
             except:
+                score = float("inf")
                 if self.verbose:
                     print("failure on {} with {} states".format(self.this_word, num_states))
             if score < best_score:
@@ -113,14 +114,16 @@ class SelectorDIC(ModelSelector):
                 hmm_model = GaussianHMM(n_components=num_states, covariance_type="diag", n_iter=1000,
                                         random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
                 score = hmm_model.score(self.X, self.lengths)
-                print("score of", score, "for model with", num_states, "states")
                 others = [word for word in self.words.keys() if word != self.this_word]
                 others_score = 0
-                for other in others:
-                    other_sequences, other_lengths = self.hwords[other]
-                    others_score += hmm_model.score(other_sequences, other_lengths)
-                others_score /= len(others)
-                score -= others_score
+                try:
+                    for other in others:
+                        other_sequences, other_lengths = self.hwords[other]
+                        others_score += hmm_model.score(other_sequences, other_lengths)
+                    others_score /= len(others)
+                    score -= others_score
+                except:
+                    score = float("-inf")
                 if score > best_score:
                     best_score = score
                     best_model = hmm_model
@@ -140,29 +143,43 @@ class SelectorCV(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         n_splits = min(len(self.sequences), 3)
-        split_method = KFold(n_splits)
-        training_sets = []
-        test_sets = []
-        for cv_train_idx, cv_test_idx in split_method.split(self.sequences):
-            x, x_lengths = combine_sequences(cv_train_idx, self.sequences)
-            training_sets.append([x, x_lengths])
-            y, y_lengths = combine_sequences(cv_test_idx, self.sequences)
-            test_sets.append([y, y_lengths])
-
+        try:
+            split_method = KFold(n_splits)
+            training_sets = []
+            test_sets = []
+            for cv_train_idx, cv_test_idx in split_method.split(self.sequences):
+                x, x_lengths = combine_sequences(cv_train_idx, self.sequences)
+                training_sets.append([x, x_lengths])
+                y, y_lengths = combine_sequences(cv_test_idx, self.sequences)
+                test_sets.append([y, y_lengths])
+        except:
+            if n_splits != 1:
+                return None
         best_model = None
         best_score = float('-inf')
         for num_states in range(self.min_n_components, self.max_n_components + 1):
-            score = 0
-            for train, test in zip(training_sets, test_sets):
+            if n_splits != 1:
+                score = 0
+                for train, test in zip(training_sets, test_sets):
+                    try:
+                        hmm_model = GaussianHMM(n_components=num_states, covariance_type="diag", n_iter=1000,
+                                                random_state=self.random_state, verbose=False).fit(train[0], train[1])
+                        score += hmm_model.score(test[0], test[1])
+                    except:
+                        if self.verbose:
+                            print("failure on {} with {} states".format(self.this_word, num_states))
+            else:
+                score = float("-inf")
                 try:
-                    hmm_model = GaussianHMM(n_components=num_states, covariance_type="diag", n_iter=1000,
-                                            random_state=self.random_state, verbose=False).fit(train[0], train[1])
-                    score += hmm_model.score(test[0], test[1])
+                    hmm_model = self.base_model(num_states)
+                    score = hmm_model.score(self.X, self.lengths)
                 except:
+                    score = float("-inf")
                     if self.verbose:
                         print("failure on {} with {} states".format(self.this_word, num_states))
             if score > best_score:
                 best_score = score
                 best_model = hmm_model
-        final_model = best_model.fit(self.X, self.lengths)
-        return final_model
+        if best_model:
+            return best_model.fit(self.X, self.lengths)
+        return best_model
